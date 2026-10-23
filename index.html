@@ -332,7 +332,7 @@ const ANALYTICS_TABLE='ilmix_funnel_events';
 const STEP_NUMBERS=Object.fromEntries(steps.map((name,index)=>[name,index+1]));
  const PORTFOLIO_URL='https://ilmixtech.github.io/Portfolio/#work';
 let step='name', typingRun=0, submissionMode='demo', submitting=false;
-let leadTrackedForCurrentSubmit=false, analyticsSessionId='', analyticsSessionStarted=false, analyticsHeartbeatTimer=null, analyticsLastTrackedStep='', analyticsCompletionLogged=false;
+let leadTrackedForCurrentSubmit=false, analyticsSessionId='', analyticsVisitorId='', analyticsSessionStarted=false, analyticsHeartbeatTimer=null, analyticsPaused=false, analyticsLastTrackedStep='', analyticsCompletionLogged=false;
 const label=(k,v)=>opts[k]?.find(o=>o[0]===v)?.[2]||'Not provided';
  const firstName=()=>form.name.trim().split(/\s+/)[0]||'';
  function normalizeWhatsapp(value){
@@ -346,22 +346,38 @@ const label=(k,v)=>opts[k]?.find(o=>o[0]===v)?.[2]||'Not provided';
    return /^\d{10,15}$/.test(digits)?digits:'';
  }
  function analyticsEnabled(){return !!(SUPABASE_URL.trim() && SUPABASE_PUBLISHABLE_KEY.trim());}
+ function generateAnonymousId(prefix){
+   const id=window.crypto?.randomUUID?.();
+   return prefix+'_'+(id||Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,14));
+ }
+ // Persistent browser ID: multiple tabs from the same browser count as ONE visitor.
+ function getAnalyticsVisitorId(){
+   if(analyticsVisitorId)return analyticsVisitorId;
+   try{
+     const key='ilmix_funnel_visitor_id';
+     const value=localStorage.getItem(key);
+     if(value && value.length>=12 && value.length<=120){analyticsVisitorId=value;return value;}
+     analyticsVisitorId=generateAnonymousId('vis');
+     localStorage.setItem(key,analyticsVisitorId);
+   }catch(_){analyticsVisitorId=generateAnonymousId('vis');}
+   return analyticsVisitorId;
+ }
+ // Tab ID: records for different tabs are kept separate, but grouped by visitor_id in SQL.
  function getAnalyticsSessionId(){
    if(analyticsSessionId)return analyticsSessionId;
-   const fallback='sess_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
    try{
      const key='ilmix_form_session_id';
      const existing=sessionStorage.getItem(key);
-     if(existing){analyticsSessionId=existing;return analyticsSessionId;}
-     sessionStorage.setItem(key,fallback);
-   }catch(_){ }
-   analyticsSessionId=fallback;
+     if(existing && existing.length>=8 && existing.length<=120){analyticsSessionId=existing;return existing;}
+     analyticsSessionId=generateAnonymousId('sess');
+     sessionStorage.setItem(key,analyticsSessionId);
+   }catch(_){analyticsSessionId=generateAnonymousId('sess');}
    return analyticsSessionId;
  }
  function deviceType(){
    const w=window.innerWidth||document.documentElement.clientWidth||0;
-   if(w&&w<768)return 'mobile';
-   if(w&&w<1024)return 'tablet';
+   if(w && w<768)return 'mobile';
+   if(w && w<1024)return 'tablet';
    return 'desktop';
  }
  function trackAnalyticsEvent(eventType,forcedStep){
@@ -369,6 +385,7 @@ const label=(k,v)=>opts[k]?.find(o=>o[0]===v)?.[2]||'Not provided';
    const currentStep=forcedStep||step||'name';
    const row={
      session_id:getAnalyticsSessionId(),
+     visitor_id:getAnalyticsVisitorId(),
      event_type:eventType,
      step_key:currentStep,
      step_number:STEP_NUMBERS[currentStep]||null,
@@ -379,30 +396,42 @@ const label=(k,v)=>opts[k]?.find(o=>o[0]===v)?.[2]||'Not provided';
      user_agent:String(navigator.userAgent||'').slice(0,500)
    };
    try{
-     fetch(SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/' + ANALYTICS_TABLE,{
+     fetch(SUPABASE_URL.replace(/\/$/, '')+'/rest/v1/'+ANALYTICS_TABLE,{
        method:'POST',
        keepalive:true,
-       headers:{
-         'apikey':SUPABASE_PUBLISHABLE_KEY,
-         'Content-Type':'application/json',
-         'Prefer':'return=minimal'
-       },
+       headers:{'apikey':SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
        body:JSON.stringify(row)
      }).catch(()=>{});
    }catch(_){ }
  }
+ function pauseAnalyticsSession(){
+   if(!analyticsSessionStarted || analyticsCompletionLogged || analyticsPaused)return;
+   analyticsPaused=true;
+   trackAnalyticsEvent('session_end',step||'name');
+ }
+ function resumeAnalyticsSession(){
+   if(!analyticsSessionStarted || analyticsCompletionLogged || !analyticsPaused)return;
+   if(document.visibilityState!=='visible')return;
+   analyticsPaused=false;
+   trackAnalyticsEvent('heartbeat',step||'name');
+ }
  function startAnalyticsSession(){
    if(analyticsSessionStarted)return;
    analyticsSessionStarted=true;
+   analyticsPaused=document.visibilityState==='hidden';
    trackAnalyticsEvent('session_start',step||'name');
+   if(analyticsPaused)trackAnalyticsEvent('session_end',step||'name');
    if(analyticsHeartbeatTimer)clearInterval(analyticsHeartbeatTimer);
-   analyticsHeartbeatTimer=setInterval(()=>{if(!analyticsCompletionLogged)trackAnalyticsEvent('heartbeat',step||analyticsLastTrackedStep||'name');},25000);
+   analyticsHeartbeatTimer=setInterval(()=>{
+     if(!analyticsCompletionLogged && !analyticsPaused && document.visibilityState==='visible')
+       trackAnalyticsEvent('heartbeat',step||analyticsLastTrackedStep||'name');
+   },15000);
  }
  function trackCurrentStep(){
    const current=step||'name';
    if(current===analyticsLastTrackedStep)return;
    analyticsLastTrackedStep=current;
-   trackAnalyticsEvent('step_view',current);
+   if(!analyticsPaused)trackAnalyticsEvent('step_view',current);
  }
  function markAnalyticsComplete(){
    if(analyticsCompletionLogged)return;
@@ -410,7 +439,13 @@ const label=(k,v)=>opts[k]?.find(o=>o[0]===v)?.[2]||'Not provided';
    trackAnalyticsEvent('submit_success','offer');
    if(analyticsHeartbeatTimer){clearInterval(analyticsHeartbeatTimer);analyticsHeartbeatTimer=null;}
  }
- window.addEventListener('beforeunload',()=>{if(!analyticsCompletionLogged)trackAnalyticsEvent('heartbeat',step||analyticsLastTrackedStep||'name');});
+ document.addEventListener('visibilitychange',()=>{
+   if(document.visibilityState==='hidden')pauseAnalyticsSession();
+   else resumeAnalyticsSession();
+ });
+ window.addEventListener('pagehide',pauseAnalyticsSession);
+ window.addEventListener('pageshow',resumeAnalyticsSession);
+ // Do not send a final heartbeat on unload; that falsely keeps closed pages 'active'.
  function customerPhoneValid(){return !!normalizeWhatsapp(form.customerWhatsapp);}
 const wordCount=s=>(String(s||'').trim().match(/\S+/g)||[]).length;
 function header(tag,title,desc=''){
