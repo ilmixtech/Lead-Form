@@ -332,6 +332,7 @@ const ANALYTICS_TABLE='ilmix_funnel_events';
 const STEP_NUMBERS=Object.fromEntries(steps.map((name,index)=>[name,index+1]));
  const PORTFOLIO_URL='https://ilmixtech.github.io/Portfolio/#work';
 let step='name', typingRun=0, submissionMode='demo', submitting=false;
+const leadSubmissionEventId = 'ilmix-lead-' + (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
 let leadTrackedForCurrentSubmit=false, analyticsSessionId='', analyticsVisitorId='', analyticsSessionStarted=false, analyticsHeartbeatTimer=null, analyticsPaused=false, analyticsLastTrackedStep='', analyticsCompletionLogged=false;
 const label=(k,v)=>opts[k]?.find(o=>o[0]===v)?.[2]||'Not provided';
  const firstName=()=>form.name.trim().split(/\s+/)[0]||'';
@@ -561,14 +562,28 @@ function render(){
 }
 function dataPayload(){return {name:form.name.trim(),customer_whatsapp:normalizeWhatsapp(form.customerWhatsapp),business:form.business.trim(),business_details:form.businessDetails.trim(),website_or_instagram:form.websiteOrInstagram.trim(),objective:label('objective',form.objective),ad_usage:label('placement',form.placement),tried_ai_ads:form.prior==='yes',experience_rating:form.prior==='yes'?(form.rating||null):null,monthly_marketing_budget:label('budget',form.budget),package_price_pkr:10000,created_at:new Date().toISOString()};}
 
-function trackLeadNow(){
+function ilmixReadCookie(name){
+  const prefix=name+'=';
+  const entry=document.cookie.split('; ').find(part=>part.startsWith(prefix));
+  if(!entry)return null;
+  try{return decodeURIComponent(entry.slice(prefix.length)).slice(0,512)}
+  catch(_){return null}
+ }
+ function ilmixClickIdentifier(){
+  const cookie=ilmixReadCookie('_fbc');
+  if(cookie)return cookie.slice(0,512);
+  // Only derive fbc if Meta supplied a real fbclid on this landing URL.
+  const click=new URLSearchParams(location.search).get('fbclid');
+  return click ? 'fb.1.'+Date.now()+'.'+click.slice(0,350) : null;
+ }
+ function trackLeadNow(){
  if(leadTrackedForCurrentSubmit) return;
  leadTrackedForCurrentSubmit = true;
- try{ if(typeof window.fbq==='function') window.fbq('track','Lead'); }catch(_){ }
+ try{ if(typeof window.fbq==='function') window.fbq('track','Lead',{}, {eventID:leadSubmissionEventId}); }catch(_){ }
 }
 async function submitForm(){
  if(submitting)return;
- leadTrackedForCurrentSubmit=false;
+ // Do not double-count the same form if the backend fails and the client retries.
  submitting=true;$('next').disabled=true;$('next').textContent='Submitting…';
  trackLeadNow();
  const payload=dataPayload();
@@ -586,7 +601,9 @@ async function submitForm(){
       monthly_marketing_budget:payload.monthly_marketing_budget,
       utm_source:utm('utm_source'), utm_medium:utm('utm_medium'),
       utm_campaign:utm('utm_campaign'), utm_content:utm('utm_content'),
-      utm_term:utm('utm_term')
+      utm_term:utm('utm_term'),
+      fbc:ilmixClickIdentifier(), fbp:ilmixReadCookie('_fbp'),
+      meta_lead_event_id:leadSubmissionEventId
     };
     const resp=await fetch(SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/ilmix_leads',{
       method:'POST',
