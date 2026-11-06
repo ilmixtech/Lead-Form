@@ -303,7 +303,6 @@
       <div id="stepContainer" class="form-body" aria-live="polite"></div>
       <div class="actions" id="actions"><button class="btn back" id="back" type="button">← Back</button><button class="btn next" id="next" type="button">Continue →</button></div>
     </div></div>
-    <div class="bottom-contact"><span class="contact-label">Click here for fast contact<span class="bubble-tip" aria-hidden="true"></span></span><button class="contact-btn" type="button" id="contact" aria-label="Contact ILMIX on WhatsApp" title="Chat with ILMIX on WhatsApp"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.52 3.48A11.87 11.87 0 0 0 12.05 0C5.49 0 .15 5.34.15 11.9c0 2.09.55 4.13 1.59 5.93L0 24l6.36-1.67a11.9 11.9 0 0 0 5.69 1.45h.01c6.56 0 11.9-5.34 11.9-11.9a11.8 11.8 0 0 0-3.44-8.4zm-8.47 18.2a9.9 9.9 0 0 1-5.04-1.38l-.36-.21-3.74.98 1-3.64-.24-.37a9.82 9.82 0 0 1-1.5-5.17c0-5.42 4.42-9.84 9.85-9.84 2.63 0 5.1 1.02 6.96 2.89a9.79 9.79 0 0 1 2.88 6.97c0 5.43-4.42 9.85-9.81 9.85zm5.4-7.38c-.3-.15-1.77-.87-2.04-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.47-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.22 3.08c.15.2 2.1 3.2 5.09 4.5.71.31 1.27.49 1.7.63.72.23 1.38.2 1.9.12.58-.09 1.77-.72 2.02-1.41.25-.7.25-1.3.17-1.42-.08-.13-.27-.2-.57-.35z"/></svg></button></div>
   </section>
 </main>
 <div class="modal-cover" id="modalCover" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle">WhatsApp inquiry</h2><button class="modal-close" id="modalClose" type="button" aria-label="Close">×</button></div><p>If WhatsApp did not open, copy this message and send it to ILMIX AI at +92 327 2490992.</p><div class="message" id="message"></div><button class="btn copy" id="modalCopy" type="button">Copy message</button></div></div>
@@ -664,7 +663,6 @@ async function copyBrief(btn){
 }
 $('next').addEventListener('click',next);
 $('back').addEventListener('click',back);
-$('contact').addEventListener('click',sendWhatsApp);
 $('modalClose').addEventListener('click',()=>$('modalCover').hidden=true);
 $('modalCopy').addEventListener('click',e=>copyBrief(e.currentTarget));
 $('modalCover').addEventListener('click',e=>{if(e.target===$('modalCover'))$('modalCover').hidden=true});
